@@ -7,11 +7,28 @@
   "license": "MIT",
   "commands": [
     {
-      "name": "tetris-menu",
-      "title": "Tetris Menu",
-      "description": "Access the Tetris menu.",
-      "mode": "view",
-      "subtitle": ""
+      "name": "main-menu",
+      "title": "Tetris",
+      "description": "Main menu for Classic Tetris",
+      "mode": "view"
+    },
+    {
+      "name": "play",
+      "title": "Play Tetris",
+      "description": "Play the game",
+      "mode": "view"
+    },
+    {
+      "name": "settings",
+      "title": "Tetris Settings",
+      "description": "Configure game settings",
+      "mode": "view"
+    },
+    {
+      "name": "stats",
+      "title": "Tetris Stats",
+      "description": "View stats and achievements",
+      "mode": "view"
     }
   ],
   "dependencies": {
