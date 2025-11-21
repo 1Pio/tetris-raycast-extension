@@ -124,3 +124,16 @@ export async function saveAchievements(achievements: AchievementsState): Promise
     console.error("Failed to save achievements:", error);
   }
 }
+
+export async function resetStats(): Promise<void> {
+  await saveStats(DEFAULT_STATS);
+}
+
+export async function resetAchievements(): Promise<void> {
+  await saveAchievements(DEFAULT_ACHIEVEMENTS);
+}
+
+export async function resetAll(): Promise<void> {
+  await resetStats();
+  await resetAchievements();
+}

@@ -169,7 +169,14 @@ export function clearLines(board: Board): { newBoard: Board; linesCleared: numbe
   return { newBoard, linesCleared };
 }
 
-export function calculateScore(linesCleared: number, level: number, isHardDrop: boolean, dropDistance: number): number {
+export function calculateScore(
+  linesCleared: number,
+  level: number,
+  isHardDrop: boolean,
+  dropDistance: number,
+  difficulty: Difficulty,
+  comboCount: number,
+): number {
   let score = 0;
 
   switch (linesCleared) {
@@ -189,6 +196,13 @@ export function calculateScore(linesCleared: number, level: number, isHardDrop: 
 
   if (isHardDrop) {
     score += dropDistance * 2;
+  }
+
+  const difficultyMultiplier = getDifficultyMultiplier(difficulty);
+  score = Math.floor(score * difficultyMultiplier);
+
+  if (comboCount > 1) {
+    score = Math.floor(score * (1 + (comboCount - 1) * 0.5));
   }
 
   return score;
@@ -227,7 +241,16 @@ export function getDropDistance(piece: Tetromino, board: Board): number {
   return Math.max(0, distance - 1);
 }
 
-export function createInitialGameState(difficulty: Difficulty, palette: ColorPalette): GameState {
+export function getGhostPiece(piece: Tetromino, board: Board): Tetromino {
+  const dropDist = getDropDistance(piece, board);
+  return { ...piece, y: piece.y + dropDist };
+}
+
+export function createInitialGameState(
+  difficulty: Difficulty,
+  palette: ColorPalette,
+  visualEffectsEnabled: boolean,
+): GameState {
   return {
     board: createEmptyBoard(),
     currentPiece: getRandomTetromino(palette),
@@ -238,6 +261,7 @@ export function createInitialGameState(difficulty: Difficulty, palette: ColorPal
     level: 1,
     rowsCleared: 0,
     comboCount: 0,
+    tetrisCount: 0,
     isPaused: false,
     isGameOver: false,
     startedAt: Date.now(),
@@ -245,6 +269,9 @@ export function createInitialGameState(difficulty: Difficulty, palette: ColorPal
     lastTickTime: Date.now(),
     difficulty,
     colorPalette: palette,
+    visualEffectsEnabled,
+    lastLineClearName: "",
+    lineClearTimeout: null,
   };
 }
 
@@ -253,25 +280,53 @@ export function renderBoardAsMarkdown(state: GameState): string {
   lines.push("```");
   lines.push("┌" + "──".repeat(BOARD_WIDTH) + "┐");
 
+  const ghostPiece =
+    state.currentPiece && state.visualEffectsEnabled ? getGhostPiece(state.currentPiece, state.board) : null;
+
   for (let y = 0; y < BOARD_HEIGHT; y++) {
     let row = "│";
     for (let x = 0; x < BOARD_WIDTH; x++) {
       const cell = state.board[y * BOARD_WIDTH + x];
-      let char = "  ";
+      let char = state.visualEffectsEnabled ? "⬛" : "       ";
 
       if (cell) {
         char = cell.color;
-      } else if (state.currentPiece) {
-        const relX = x - state.currentPiece.x;
-        const relY = y - state.currentPiece.y;
-        if (
-          relY >= 0 &&
-          relY < state.currentPiece.shape.length &&
-          relX >= 0 &&
-          relX < state.currentPiece.shape[relY].length &&
-          state.currentPiece.shape[relY][relX]
-        ) {
-          char = state.currentPiece.color;
+      } else {
+        let isGhost = false;
+        let isCurrent = false;
+
+        if (state.currentPiece) {
+          const relX = x - state.currentPiece.x;
+          const relY = y - state.currentPiece.y;
+          if (
+            relY >= 0 &&
+            relY < state.currentPiece.shape.length &&
+            relX >= 0 &&
+            relX < state.currentPiece.shape[relY].length &&
+            state.currentPiece.shape[relY][relX]
+          ) {
+            isCurrent = true;
+          }
+        }
+
+        if (ghostPiece && !isCurrent) {
+          const relX = x - ghostPiece.x;
+          const relY = y - ghostPiece.y;
+          if (
+            relY >= 0 &&
+            relY < ghostPiece.shape.length &&
+            relX >= 0 &&
+            relX < ghostPiece.shape[relY].length &&
+            ghostPiece.shape[relY][relX]
+          ) {
+            isGhost = true;
+          }
+        }
+
+        if (isCurrent) {
+          char = state.currentPiece!.color;
+        } else if (isGhost) {
+          char = "░░ ";
         }
       }
 
@@ -283,6 +338,13 @@ export function renderBoardAsMarkdown(state: GameState): string {
 
   lines.push("└" + "──".repeat(BOARD_WIDTH) + "┘");
   lines.push("```");
+
+  if (state.lastLineClearName) {
+    lines.push(`\n**${state.lastLineClearName}!**`);
+    if (state.comboCount > 1) {
+      lines.push(`**Combo ${state.comboCount}x!**`);
+    }
+  }
 
   if (state.isPaused) {
     lines.push("\n**PAUSED**");

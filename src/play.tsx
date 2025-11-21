@@ -1,6 +1,6 @@
-import { ActionPanel, Action, Detail, Icon, useNavigation } from "@raycast/api";
-import { useEffect, useState, useCallback } from "react";
-import { GameState } from "./types";
+import { ActionPanel, Action, Detail, Icon, useNavigation, showToast, Toast, Keyboard } from "@raycast/api";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { GameState, GameSettings } from "./types";
 import {
   createInitialGameState,
   renderBoardAsMarkdown,
@@ -17,18 +17,25 @@ import {
   getRandomTetromino,
   getLineClearName,
 } from "./game-engine";
-import { loadSettings, updateStatsWithRun } from "./storage";
+import { loadSettings, updateStatsWithRun, loadStats, loadAchievements } from "./storage";
+import { checkAchievements, unlockAchievements, GameRunData } from "./achievements";
 
 export default function Command() {
   const { pop } = useNavigation();
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [lastLineClear, setLastLineClear] = useState<string>("");
+  const [settings, setSettings] = useState<GameSettings | null>(null);
+  const gameEndedRef = useRef(false);
 
   useEffect(() => {
     async function initGame() {
-      const settings = await loadSettings();
-      const initialState = createInitialGameState(settings.difficulty, settings.colorPalette);
+      const loadedSettings = await loadSettings();
+      setSettings(loadedSettings);
+      const initialState = createInitialGameState(
+        loadedSettings.difficulty,
+        loadedSettings.colorPalette,
+        loadedSettings.visualEffectsEnabled,
+      );
       setGameState(initialState);
       setIsLoading(false);
     }
@@ -36,8 +43,47 @@ export default function Command() {
   }, []);
 
   const finalizeGame = useCallback(async (state: GameState) => {
+    if (gameEndedRef.current) return;
+    gameEndedRef.current = true;
+
     const playTime = state.activePlayTimeMs;
     await updateStatsWithRun(state.score, state.level, state.rowsCleared, playTime, state.difficulty, state.comboCount);
+
+    const [previousStats, currentAchievements] = await Promise.all([loadStats(), loadAchievements()]);
+
+    const pbMessages: string[] = [];
+    if (state.score > previousStats.bestScore) pbMessages.push("Score");
+    if (state.level > previousStats.bestLevel) pbMessages.push("Level");
+    if (state.rowsCleared > previousStats.mostRowsCleared) pbMessages.push("Rows Cleared");
+    if (state.comboCount > previousStats.bestCombo) pbMessages.push("Combo");
+
+    if (pbMessages.length > 0) {
+      await showToast({
+        style: Toast.Style.Success,
+        title: "New Personal Best!",
+        message: pbMessages.join(", "),
+      });
+    }
+
+    const runData: GameRunData = {
+      score: state.score,
+      level: state.level,
+      rowsCleared: state.rowsCleared,
+      difficulty: state.difficulty,
+      comboCount: state.comboCount,
+      tetrisCount: state.tetrisCount,
+    };
+
+    const newAchievements = checkAchievements(runData, currentAchievements);
+    if (newAchievements.length > 0) {
+      await unlockAchievements(newAchievements);
+      const achievementNames = newAchievements.map((id) => id.replace(/_/g, " ")).join(", ");
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Achievement Unlocked!",
+        message: achievementNames,
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -47,6 +93,15 @@ export default function Command() {
       }
     };
   }, [gameState, finalizeGame]);
+
+  useEffect(() => {
+    if (gameState?.lastLineClearName) {
+      const timeout = setTimeout(() => {
+        setGameState((prev) => (prev ? { ...prev, lastLineClearName: "" } : prev));
+      }, 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [gameState?.lastLineClearName]);
 
   useEffect(() => {
     if (!gameState || gameState.isPaused || gameState.isGameOver) return;
@@ -86,13 +141,19 @@ export default function Command() {
       let newScore = prevState.score;
       let newCombo = prevState.comboCount;
       let newRowsCleared = prevState.rowsCleared;
+      let newTetrisCount = prevState.tetrisCount;
+      let lineClearName = "";
 
       if (linesCleared > 0) {
-        newScore += calculateScore(linesCleared, prevState.level, false, 0);
-        newCombo += linesCleared;
+        const comboForScore = newCombo > 0 ? newCombo : 1;
+        newScore += calculateScore(linesCleared, prevState.level, false, 0, prevState.difficulty, comboForScore);
+        newCombo += 1;
         newRowsCleared += linesCleared;
-        setLastLineClear(getLineClearName(linesCleared));
-        setTimeout(() => setLastLineClear(""), 2000);
+        lineClearName = getLineClearName(linesCleared);
+
+        if (linesCleared === 4) {
+          newTetrisCount += 1;
+        }
       } else {
         newCombo = 0;
       }
@@ -134,8 +195,10 @@ export default function Command() {
         level: newLevel,
         rowsCleared: newRowsCleared,
         comboCount: newCombo,
+        tetrisCount: newTetrisCount,
         activePlayTimeMs: newActiveTime,
         lastTickTime: now,
+        lastLineClearName: lineClearName,
       };
     });
   }, [finalizeGame]);
@@ -182,15 +245,24 @@ export default function Command() {
       const newBoard = lockPieceToBoard(droppedPiece, prevState.board);
       const { newBoard: clearedBoard, linesCleared } = clearLines(newBoard);
 
-      const newScore = prevState.score + calculateScore(linesCleared, prevState.level, true, dropDist);
       let newCombo = prevState.comboCount;
       let newRowsCleared = prevState.rowsCleared;
+      let newTetrisCount = prevState.tetrisCount;
+      let lineClearName = "";
+
+      const comboForScore = linesCleared > 0 && newCombo > 0 ? newCombo : 1;
+      const newScore =
+        prevState.score +
+        calculateScore(linesCleared, prevState.level, true, dropDist, prevState.difficulty, comboForScore);
 
       if (linesCleared > 0) {
-        newCombo += linesCleared;
+        newCombo += 1;
         newRowsCleared += linesCleared;
-        setLastLineClear(getLineClearName(linesCleared));
-        setTimeout(() => setLastLineClear(""), 2000);
+        lineClearName = getLineClearName(linesCleared);
+
+        if (linesCleared === 4) {
+          newTetrisCount += 1;
+        }
       } else {
         newCombo = 0;
       }
@@ -229,6 +301,8 @@ export default function Command() {
         level: newLevel,
         rowsCleared: newRowsCleared,
         comboCount: newCombo,
+        tetrisCount: newTetrisCount,
+        lastLineClearName: lineClearName,
       };
     });
   }, [finalizeGame]);
@@ -287,33 +361,74 @@ export default function Command() {
     });
   }, []);
 
-  if (isLoading || !gameState) {
+  if (isLoading || !gameState || !settings) {
     return <Detail isLoading={true} markdown="Loading game..." />;
   }
 
   const markdown = renderBoardAsMarkdown(gameState);
+
+  const moveKeys = settings.controlMode === "arrowKeys" ? "Arrow Keys" : "WASD";
+  const rotateKey = settings.controlMode === "arrowKeys" ? "Up Arrow" : "W";
+  const downKey = settings.controlMode === "arrowKeys" ? "Down Arrow" : "S";
+  const leftKey = settings.controlMode === "arrowKeys" ? "Left Arrow" : "A";
+  const rightKey = settings.controlMode === "arrowKeys" ? "Right Arrow" : "D";
+
   const controlsHelp = `
 ### Controls
-- Arrow Keys / WASD: Move piece
-- Up Arrow / W: Rotate
-- Space: Hard drop
-- C: Hold piece
-- E: Pause/Resume
+- ${moveKeys}: Move piece (${leftKey} / ${rightKey} / ${downKey})
+- ${rotateKey}: Rotate
+- ${settings.primaryKey}: Hard drop
+- ${settings.secondaryKey}: Hold piece
+- ${settings.pauseKey}: Pause/Resume
 - Backspace: Return to menu
-${lastLineClear ? `\n**${lastLineClear}!**` : ""}
   `;
+
+  const keyMap: Record<string, Keyboard.Key> = {
+    E: "e",
+    P: "p",
+    Escape: "escape",
+    Space: "space",
+    Enter: "return",
+    C: "c",
+    Shift: "shift",
+    Tab: "tab",
+  };
+
+  const rotateKeyShortcut =
+    settings.controlMode === "arrowKeys"
+      ? { modifiers: [], key: "arrowUp" as Keyboard.Key }
+      : { modifiers: [], key: "w" as Keyboard.Key };
+  const downKeyShortcut =
+    settings.controlMode === "arrowKeys"
+      ? { modifiers: [], key: "arrowDown" as Keyboard.Key }
+      : { modifiers: [], key: "s" as Keyboard.Key };
+  const leftKeyShortcut =
+    settings.controlMode === "arrowKeys"
+      ? { modifiers: [], key: "arrowLeft" as Keyboard.Key }
+      : { modifiers: [], key: "a" as Keyboard.Key };
+  const rightKeyShortcut =
+    settings.controlMode === "arrowKeys"
+      ? { modifiers: [], key: "arrowRight" as Keyboard.Key }
+      : { modifiers: [], key: "d" as Keyboard.Key };
+
+  const pauseKeyShortcut = { modifiers: [], key: (keyMap[settings.pauseKey] || "e") as Keyboard.Key };
+  const primaryKeyShortcut = { modifiers: [], key: (keyMap[settings.primaryKey] || "space") as Keyboard.Key };
+  const secondaryKeyShortcut = { modifiers: [], key: (keyMap[settings.secondaryKey] || "c") as Keyboard.Key };
 
   return (
     <Detail
       markdown={markdown + "\n" + controlsHelp}
       metadata={
         <Detail.Metadata>
-          <Detail.Metadata.Label title="Score" text={gameState.score.toString()} />
+          <Detail.Metadata.Label title="Score" text={gameState.score.toLocaleString()} />
           <Detail.Metadata.Label title="Level" text={gameState.level.toString()} />
           <Detail.Metadata.Label title="Rows" text={gameState.rowsCleared.toString()} />
-          <Detail.Metadata.Label title="Combo" text={gameState.comboCount.toString()} />
+          <Detail.Metadata.Label title="Combo" text={gameState.comboCount > 1 ? `${gameState.comboCount}x` : "—"} />
           <Detail.Metadata.Label title="Time" text={formatTime(gameState.activePlayTimeMs)} />
-          <Detail.Metadata.Label title="Difficulty" text={gameState.difficulty} />
+          <Detail.Metadata.Label
+            title="Difficulty"
+            text={gameState.difficulty.charAt(0).toUpperCase() + gameState.difficulty.slice(1)}
+          />
           <Detail.Metadata.Separator />
           <Detail.Metadata.Label title="Next Piece" text={renderPiecePreview(gameState.nextPiece)} />
           <Detail.Metadata.Label title="Held Piece" text={renderPiecePreview(gameState.heldPiece)} />
@@ -321,13 +436,13 @@ ${lastLineClear ? `\n**${lastLineClear}!**` : ""}
       }
       actions={
         <ActionPanel>
-          <Action title="Rotate" onAction={rotate} shortcut={{ modifiers: [], key: "arrowUp" }} />
-          <Action title="Move Down" onAction={() => movePiece(0, 1)} shortcut={{ modifiers: [], key: "arrowDown" }} />
-          <Action title="Move Left" onAction={() => movePiece(-1, 0)} shortcut={{ modifiers: [], key: "arrowLeft" }} />
-          <Action title="Move Right" onAction={() => movePiece(1, 0)} shortcut={{ modifiers: [], key: "arrowRight" }} />
-          <Action title="Hard Drop" onAction={hardDrop} shortcut={{ modifiers: [], key: "space" }} />
-          <Action title="Hold Piece" onAction={hold} shortcut={{ modifiers: [], key: "c" }} />
-          <Action title="Pause/Resume" onAction={togglePause} shortcut={{ modifiers: [], key: "e" }} />
+          <Action title="Rotate" onAction={rotate} shortcut={rotateKeyShortcut} />
+          <Action title="Move Down" onAction={() => movePiece(0, 1)} shortcut={downKeyShortcut} />
+          <Action title="Move Left" onAction={() => movePiece(-1, 0)} shortcut={leftKeyShortcut} />
+          <Action title="Move Right" onAction={() => movePiece(1, 0)} shortcut={rightKeyShortcut} />
+          <Action title="Hard Drop" onAction={hardDrop} shortcut={primaryKeyShortcut} />
+          <Action title="Hold Piece" onAction={hold} shortcut={secondaryKeyShortcut} />
+          <Action title="Pause/Resume" onAction={togglePause} shortcut={pauseKeyShortcut} />
           <Action
             title="Back to Menu"
             icon={Icon.ArrowLeft}

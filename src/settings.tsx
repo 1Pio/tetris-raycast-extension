@@ -1,7 +1,7 @@
-import { ActionPanel, Action, Form, showToast, Toast, useNavigation } from "@raycast/api";
+import { ActionPanel, Action, Form, showToast, Toast, useNavigation, confirmAlert, Alert, Icon } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { GameSettings, Difficulty, ColorPalette, ControlMode } from "./types";
-import { loadSettings, saveSettings } from "./storage";
+import { loadSettings, saveSettings, resetStats, resetAchievements, resetAll } from "./storage";
 
 export default function Command() {
   const { pop } = useNavigation();
@@ -45,6 +45,69 @@ export default function Command() {
     pop();
   }
 
+  async function handleResetStats() {
+    const confirmed = await confirmAlert({
+      title: "Reset Statistics",
+      message: "Are you sure you want to reset all your game statistics? This action cannot be undone.",
+      icon: Icon.Trash,
+      primaryAction: {
+        title: "Reset Stats",
+        style: Alert.ActionStyle.Destructive,
+      },
+    });
+
+    if (confirmed) {
+      await resetStats();
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Statistics reset",
+        message: "All your game stats have been cleared",
+      });
+    }
+  }
+
+  async function handleResetAchievements() {
+    const confirmed = await confirmAlert({
+      title: "Reset Achievements",
+      message: "Are you sure you want to reset all your achievements? This action cannot be undone.",
+      icon: Icon.Trash,
+      primaryAction: {
+        title: "Reset Achievements",
+        style: Alert.ActionStyle.Destructive,
+      },
+    });
+
+    if (confirmed) {
+      await resetAchievements();
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Achievements reset",
+        message: "All your achievements have been cleared",
+      });
+    }
+  }
+
+  async function handleResetAll() {
+    const confirmed = await confirmAlert({
+      title: "Reset Everything",
+      message: "Are you sure you want to reset ALL statistics and achievements? This action cannot be undone.",
+      icon: Icon.Trash,
+      primaryAction: {
+        title: "Reset Everything",
+        style: Alert.ActionStyle.Destructive,
+      },
+    });
+
+    if (confirmed) {
+      await resetAll();
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Everything reset",
+        message: "All stats and achievements have been cleared",
+      });
+    }
+  }
+
   if (isLoading || !settings) {
     return <Form isLoading={true} />;
   }
@@ -54,6 +117,16 @@ export default function Command() {
       actions={
         <ActionPanel>
           <Action.SubmitForm title="Save Settings" onSubmit={handleSubmit} />
+          <ActionPanel.Section title="Reset Data">
+            <Action title="Reset Statistics" icon={Icon.Trash} onAction={handleResetStats} />
+            <Action title="Reset Achievements" icon={Icon.Trash} onAction={handleResetAchievements} />
+            <Action
+              title="Reset Everything"
+              icon={Icon.Trash}
+              onAction={handleResetAll}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "delete" }}
+            />
+          </ActionPanel.Section>
         </ActionPanel>
       }
     >

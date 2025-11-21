@@ -65,6 +65,7 @@ export interface GameState {
   level: number;
   rowsCleared: number;
   comboCount: number;
+  tetrisCount: number;
   isPaused: boolean;
   isGameOver: boolean;
   startedAt: number;
@@ -72,6 +73,9 @@ export interface GameState {
   lastTickTime: number;
   difficulty: Difficulty;
   colorPalette: ColorPalette;
+  visualEffectsEnabled: boolean;
+  lastLineClearName: string;
+  lineClearTimeout: number | null;
 }
 
 export const BOARD_WIDTH = 10;
