@@ -8,10 +8,27 @@
   "commands": [
     {
       "name": "tetris-menu",
-      "title": "Tetris Menu",
-      "description": "Access the Tetris menu.",
-      "mode": "view",
-      "subtitle": ""
+      "title": "Tetris",
+      "description": "Classic Tetris game main menu",
+      "mode": "view"
+    },
+    {
+      "name": "play",
+      "title": "Play Tetris",
+      "description": "Play a game of Classic Tetris",
+      "mode": "view"
+    },
+    {
+      "name": "settings",
+      "title": "Tetris Settings",
+      "description": "Configure game settings",
+      "mode": "view"
+    },
+    {
+      "name": "stats",
+      "title": "Tetris Stats",
+      "description": "View your statistics and achievements",
+      "mode": "view"
     }
   ],
   "dependencies": {

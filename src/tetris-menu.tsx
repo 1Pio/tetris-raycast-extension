@@ -1,32 +1,42 @@
 import { ActionPanel, Action, Icon, List } from "@raycast/api";
 
-const ITEMS = Array.from(Array(3).keys()).map((key) => {
-  return {
-    id: key,
-    icon: Icon.Bird,
-    title: "Title " + key,
-    subtitle: "Subtitle",
-    accessory: "Accessory",
-  };
-});
-
 export default function Command() {
   return (
-    <List>
-      {ITEMS.map((item) => (
-        <List.Item
-          key={item.id}
-          icon={item.icon}
-          title={item.title}
-          subtitle={item.subtitle}
-          accessories={[{ icon: Icon.Text, text: item.accessory }]}
-          actions={
-            <ActionPanel>
-              <Action.CopyToClipboard content={item.title} />
-            </ActionPanel>
-          }
-        />
-      ))}
+    <List searchBarPlaceholder="Select an option">
+      <List.Item
+        icon={Icon.Play}
+        title="Start New Game"
+        subtitle="Begin a new game of Tetris"
+        actions={
+          <ActionPanel>
+            <Action.Push icon={Icon.Play} title="Start Game" target={<PlayCommand />} />
+          </ActionPanel>
+        }
+      />
+      <List.Item
+        icon={Icon.Gear}
+        title="Settings"
+        subtitle="Configure game preferences"
+        actions={
+          <ActionPanel>
+            <Action.Push icon={Icon.Gear} title="Open Settings" target={<SettingsCommand />} />
+          </ActionPanel>
+        }
+      />
+      <List.Item
+        icon={Icon.BarChart}
+        title="Stats & Achievements"
+        subtitle="View your statistics and achievements"
+        actions={
+          <ActionPanel>
+            <Action.Push icon={Icon.BarChart} title="View Stats" target={<StatsCommand />} />
+          </ActionPanel>
+        }
+      />
     </List>
   );
 }
+
+import PlayCommand from "./play";
+import SettingsCommand from "./settings";
+import StatsCommand from "./stats";
