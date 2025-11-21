@@ -27,7 +27,7 @@ export default function Command() {
   const unlockedCount = Object.keys(achievements.unlocked).length;
 
   return (
-    <List selectedItemId={selectedId} onSelectionChange={setSelectedId}>
+    <List selectedItemId={selectedId} onSelectionChange={(id) => setSelectedId(id ?? "stats")}>
       <List.Item
         id="stats"
         title="Statistics"
