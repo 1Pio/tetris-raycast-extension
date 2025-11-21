@@ -1,4 +1,4 @@
-import { ActionPanel, Action, Detail, Icon, useNavigation, showToast, Toast, Keyboard } from "@raycast/api";
+import { ActionPanel, Action, Detail, Icon, useNavigation, showToast, Toast, Keyboard, Color } from "@raycast/api";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { GameState, GameSettings } from "./types";
 import {
@@ -383,48 +383,52 @@ export default function Command() {
 - Backspace: Return to menu
   `;
 
-  const keyMap: Record<string, Keyboard.Key> = {
+  const keyMap: Record<string, Keyboard.KeyEquivalent> = {
     E: "e",
     P: "p",
-    Escape: "escape",
+    R: "r",
     Space: "space",
-    Enter: "return",
+    Q: "q",
     C: "c",
-    Shift: "shift",
+    F: "f",
     Tab: "tab",
   };
 
   const rotateKeyShortcut =
     settings.controlMode === "arrowKeys"
-      ? { modifiers: [], key: "arrowUp" as Keyboard.Key }
-      : { modifiers: [], key: "w" as Keyboard.Key };
+      ? { modifiers: [], key: "arrowUp" as Keyboard.KeyEquivalent }
+      : { modifiers: [], key: "w" as Keyboard.KeyEquivalent };
   const downKeyShortcut =
     settings.controlMode === "arrowKeys"
-      ? { modifiers: [], key: "arrowDown" as Keyboard.Key }
-      : { modifiers: [], key: "s" as Keyboard.Key };
+      ? { modifiers: [], key: "arrowDown" as Keyboard.KeyEquivalent }
+      : { modifiers: [], key: "s" as Keyboard.KeyEquivalent };
   const leftKeyShortcut =
     settings.controlMode === "arrowKeys"
-      ? { modifiers: [], key: "arrowLeft" as Keyboard.Key }
-      : { modifiers: [], key: "a" as Keyboard.Key };
+      ? { modifiers: [], key: "arrowLeft" as Keyboard.KeyEquivalent }
+      : { modifiers: [], key: "a" as Keyboard.KeyEquivalent };
   const rightKeyShortcut =
     settings.controlMode === "arrowKeys"
-      ? { modifiers: [], key: "arrowRight" as Keyboard.Key }
-      : { modifiers: [], key: "d" as Keyboard.Key };
+      ? { modifiers: [], key: "arrowRight" as Keyboard.KeyEquivalent }
+      : { modifiers: [], key: "d" as Keyboard.KeyEquivalent };
 
-  const pauseKeyShortcut = { modifiers: [], key: (keyMap[settings.pauseKey] || "e") as Keyboard.Key };
-  const primaryKeyShortcut = { modifiers: [], key: (keyMap[settings.primaryKey] || "space") as Keyboard.Key };
-  const secondaryKeyShortcut = { modifiers: [], key: (keyMap[settings.secondaryKey] || "c") as Keyboard.Key };
+  const pauseKeyShortcut = { modifiers: [], key: (keyMap[settings.pauseKey] || "e") as Keyboard.KeyEquivalent };
+  const primaryKeyShortcut = { modifiers: [], key: (keyMap[settings.primaryKey] || "space") as Keyboard.KeyEquivalent };
+  const secondaryKeyShortcut = { modifiers: [], key: (keyMap[settings.secondaryKey] || "c") as Keyboard.KeyEquivalent };
 
   return (
     <Detail
       markdown={markdown + "\n" + controlsHelp}
       metadata={
         <Detail.Metadata>
-          <Detail.Metadata.Label title="Score" text={gameState.score.toLocaleString()} />
+          <Detail.Metadata.Label title="Score" text={{ value: gameState.score.toLocaleString(), color: Color.Blue }} />
           <Detail.Metadata.Label title="Level" text={gameState.level.toString()} />
           <Detail.Metadata.Label title="Rows" text={gameState.rowsCleared.toString()} />
           <Detail.Metadata.Label title="Combo" text={gameState.comboCount > 1 ? `${gameState.comboCount}x` : "—"} />
+          <Detail.Metadata.Separator />
           <Detail.Metadata.Label title="Time" text={formatTime(gameState.activePlayTimeMs)} />
+          <Detail.Metadata.TagList title="Difficulty">
+            <Detail.Metadata.TagList.Item text={gameState.difficulty.charAt(0).toUpperCase() + gameState.difficulty.slice(1)} color={"#eed535"} />
+          </Detail.Metadata.TagList>
           <Detail.Metadata.Label
             title="Difficulty"
             text={gameState.difficulty.charAt(0).toUpperCase() + gameState.difficulty.slice(1)}

@@ -278,16 +278,17 @@ export function createInitialGameState(
 export function renderBoardAsMarkdown(state: GameState): string {
   const lines: string[] = [];
   lines.push("```");
-  lines.push("┌" + "──".repeat(BOARD_WIDTH) + "┐");
+  /*lines.push("┌" + "──".repeat(BOARD_WIDTH) + "┐");*/
 
   const ghostPiece =
     state.currentPiece && state.visualEffectsEnabled ? getGhostPiece(state.currentPiece, state.board) : null;
 
   for (let y = 0; y < BOARD_HEIGHT; y++) {
-    let row = "│";
+    let border = "│"
+    let row = border;
     for (let x = 0; x < BOARD_WIDTH; x++) {
       const cell = state.board[y * BOARD_WIDTH + x];
-      let char = state.visualEffectsEnabled ? "⬛" : "       ";
+      let char = state.visualEffectsEnabled ? "◾" : "◾";
 
       if (cell) {
         char = cell.color;
@@ -326,17 +327,17 @@ export function renderBoardAsMarkdown(state: GameState): string {
         if (isCurrent) {
           char = state.currentPiece!.color;
         } else if (isGhost) {
-          char = "░░ ";
+          char = "🔳";
         }
       }
 
       row += char;
     }
-    row += "│";
+    row += border;
     lines.push(row);
   }
 
-  lines.push("└" + "──".repeat(BOARD_WIDTH) + "┘");
+  /*lines.push("└" + "──".repeat(BOARD_WIDTH) + "┘");*/
   lines.push("```");
 
   if (state.lastLineClearName) {

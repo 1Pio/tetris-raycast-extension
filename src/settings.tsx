@@ -158,17 +158,17 @@ export default function Command() {
       <Form.Dropdown id="pauseKey" title="Pause Key" defaultValue={settings.pauseKey}>
         <Form.Dropdown.Item value="E" title="E" />
         <Form.Dropdown.Item value="P" title="P" />
-        <Form.Dropdown.Item value="Escape" title="Escape" />
+        <Form.Dropdown.Item value="R" title="R" />
       </Form.Dropdown>
 
       <Form.Dropdown id="primaryKey" title="Primary Key (Hard Drop)" defaultValue={settings.primaryKey}>
         <Form.Dropdown.Item value="Space" title="Space" />
-        <Form.Dropdown.Item value="Enter" title="Enter" />
+        <Form.Dropdown.Item value="Q" title="Q" />
       </Form.Dropdown>
 
       <Form.Dropdown id="secondaryKey" title="Secondary Key (Hold)" defaultValue={settings.secondaryKey}>
         <Form.Dropdown.Item value="C" title="C" />
-        <Form.Dropdown.Item value="Shift" title="Shift" />
+        <Form.Dropdown.Item value="F" title="F" />
         <Form.Dropdown.Item value="Tab" title="Tab" />
       </Form.Dropdown>
     </Form>

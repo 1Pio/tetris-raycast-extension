@@ -33,7 +33,7 @@ export default function Command() {
   const averagePlayTime = stats.totalGamesPlayed > 0 ? Math.round(stats.totalPlayTimeMs / stats.totalGamesPlayed) : 0;
 
   return (
-    <List selectedItemId={selectedId} onSelectionChange={(id) => setSelectedId(id ?? "stats")}>
+    <List isShowingDetail selectedItemId={selectedId} onSelectionChange={(id) => setSelectedId(id ?? "stats")}>
       <List.Item
         id="stats"
         title="Statistics"
