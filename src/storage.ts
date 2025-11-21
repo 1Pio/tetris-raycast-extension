@@ -76,7 +76,7 @@ export async function updateStatsWithRun(
   level: number,
   rowsCleared: number,
   playTimeMs: number,
-  difficulty: string,
+  difficulty: GameRunRecord["difficulty"],
   comboCount: number,
 ): Promise<void> {
   const stats = await loadStats();
@@ -95,7 +95,7 @@ export async function updateStatsWithRun(
     level,
     rowsCleared,
     playTimeMs,
-    difficulty: difficulty as GameStats["bestRuns"][0]["difficulty"],
+    difficulty,
     timestamp: new Date().toISOString(),
   };
 

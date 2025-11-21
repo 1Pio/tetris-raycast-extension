@@ -249,15 +249,23 @@ export function createInitialGameState(difficulty: Difficulty, palette: ColorPal
 }
 
 export function renderBoardAsMarkdown(state: GameState): string {
+  if (state.isGameOver) {
+    return `
+# GAME OVER
+
+Press "space" to quickly start a new round!
+    `.trim();
+  }
+
+  const EMPTY_CELL = "⬛";
   const lines: string[] = [];
   lines.push("```");
-  lines.push("┌" + "──".repeat(BOARD_WIDTH) + "┐");
 
   for (let y = 0; y < BOARD_HEIGHT; y++) {
     let row = "│";
     for (let x = 0; x < BOARD_WIDTH; x++) {
       const cell = state.board[y * BOARD_WIDTH + x];
-      let char = "  ";
+      let char = EMPTY_CELL;
 
       if (cell) {
         char = cell.color;
@@ -288,26 +296,21 @@ export function renderBoardAsMarkdown(state: GameState): string {
     lines.push("\n**PAUSED**");
   }
 
-  if (state.isGameOver) {
-    lines.push("\n**GAME OVER**");
-    lines.push(`\nFinal Score: ${state.score}`);
-    lines.push(`Level: ${state.level}`);
-    lines.push(`Rows Cleared: ${state.rowsCleared}`);
-  }
-
   return lines.join("\n");
 }
 
 export function renderPiecePreview(piece: Tetromino | null): string {
   if (!piece) return "None";
 
+  const EMPTY_CELL = "⬛";
   const lines: string[] = [];
   for (let y = 0; y < piece.shape.length; y++) {
     let row = "";
     for (let x = 0; x < piece.shape[y].length; x++) {
-      row += piece.shape[y][x] ? piece.color : "  ";
+      row += piece.shape[y][x] ? piece.color : EMPTY_CELL;
     }
-    if (row.trim()) lines.push(row);
+    const trimmedRow = row.replace(/⬛/g, "").trim();
+    if (trimmedRow) lines.push(row);
   }
 
   return lines.join("\n") || piece.type;

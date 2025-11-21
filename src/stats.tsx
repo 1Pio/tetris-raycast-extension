@@ -8,7 +8,7 @@ export default function Command() {
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<GameStats | null>(null);
   const [achievements, setAchievements] = useState<AchievementsState | null>(null);
-  const [selectedId, setSelectedId] = useState<string>("stats");
+  const [selectedId, setSelectedId] = useState<string | null>("stats");
 
   useEffect(() => {
     async function load() {
@@ -20,6 +20,10 @@ export default function Command() {
     load();
   }, []);
 
+  const handleSelectionChange = (id: string | null) => {
+    setSelectedId(id);
+  };
+
   if (isLoading || !stats || !achievements) {
     return <List isLoading={true} />;
   }
@@ -27,7 +31,7 @@ export default function Command() {
   const unlockedCount = Object.keys(achievements.unlocked).length;
 
   return (
-    <List selectedItemId={selectedId} onSelectionChange={setSelectedId}>
+    <List selectedItemId={selectedId} onSelectionChange={handleSelectionChange}>
       <List.Item
         id="stats"
         title="Statistics"

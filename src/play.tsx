@@ -1,5 +1,5 @@
 import { ActionPanel, Action, Detail, Icon, useNavigation } from "@raycast/api";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { GameState } from "./types";
 import {
   createInitialGameState,
@@ -24,6 +24,7 @@ export default function Command() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastLineClear, setLastLineClear] = useState<string>("");
+  const repeatTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     async function initGame() {
@@ -33,6 +34,15 @@ export default function Command() {
       setIsLoading(false);
     }
     initGame();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (repeatTimerRef.current) {
+        clearInterval(repeatTimerRef.current);
+        repeatTimerRef.current = null;
+      }
+    };
   }, []);
 
   const finalizeGame = useCallback(async (state: GameState) => {
@@ -140,6 +150,15 @@ export default function Command() {
     });
   }, [finalizeGame]);
 
+  const restartGame = useCallback(async () => {
+    if (gameState && gameState.isGameOver) {
+      const settings = await loadSettings();
+      const newState = createInitialGameState(settings.difficulty, settings.colorPalette);
+      setGameState(newState);
+      setLastLineClear("");
+    }
+  }, [gameState]);
+
   const movePiece = useCallback((dx: number, dy: number) => {
     setGameState((prevState) => {
       if (!prevState || prevState.isPaused || prevState.isGameOver || !prevState.currentPiece) return prevState;
@@ -158,7 +177,23 @@ export default function Command() {
     });
   }, []);
 
+  const startRepeat = useCallback((action: () => void) => {
+    if (repeatTimerRef.current) {
+      clearInterval(repeatTimerRef.current);
+    }
+    action();
+    repeatTimerRef.current = setInterval(action, 100);
+  }, []);
+
+  const stopRepeat = useCallback(() => {
+    if (repeatTimerRef.current) {
+      clearInterval(repeatTimerRef.current);
+      repeatTimerRef.current = null;
+    }
+  }, []);
+
   const rotate = useCallback(() => {
+    stopRepeat();
     setGameState((prevState) => {
       if (!prevState || prevState.isPaused || prevState.isGameOver || !prevState.currentPiece) return prevState;
 
@@ -170,9 +205,10 @@ export default function Command() {
 
       return prevState;
     });
-  }, []);
+  }, [stopRepeat]);
 
   const hardDrop = useCallback(() => {
+    stopRepeat();
     setGameState((prevState) => {
       if (!prevState || prevState.isPaused || prevState.isGameOver || !prevState.currentPiece) return prevState;
 
@@ -231,9 +267,10 @@ export default function Command() {
         comboCount: newCombo,
       };
     });
-  }, [finalizeGame]);
+  }, [finalizeGame, stopRepeat]);
 
   const hold = useCallback(() => {
+    stopRepeat();
     setGameState((prevState) => {
       if (!prevState || prevState.isPaused || prevState.isGameOver || !prevState.currentPiece || !prevState.canHold)
         return prevState;
@@ -262,9 +299,10 @@ export default function Command() {
         };
       }
     });
-  }, []);
+  }, [stopRepeat]);
 
   const togglePause = useCallback(() => {
+    stopRepeat();
     setGameState((prevState) => {
       if (!prevState || prevState.isGameOver) return prevState;
 
@@ -285,21 +323,23 @@ export default function Command() {
         };
       }
     });
-  }, []);
+  }, [stopRepeat]);
 
   if (isLoading || !gameState) {
     return <Detail isLoading={true} markdown="Loading game..." />;
   }
 
   const markdown = renderBoardAsMarkdown(gameState);
-  const controlsHelp = `
+  const controlsHelp = gameState.isGameOver
+    ? ""
+    : `
 ### Controls
 - Arrow Keys / WASD: Move piece
 - Up Arrow / W: Rotate
 - Space: Hard drop
 - C: Hold piece
 - E: Pause/Resume
-- Backspace: Return to menu
+- Escape: Return to menu
 ${lastLineClear ? `\n**${lastLineClear}!**` : ""}
   `;
 
@@ -307,33 +347,69 @@ ${lastLineClear ? `\n**${lastLineClear}!**` : ""}
     <Detail
       markdown={markdown + "\n" + controlsHelp}
       metadata={
-        <Detail.Metadata>
-          <Detail.Metadata.Label title="Score" text={gameState.score.toString()} />
-          <Detail.Metadata.Label title="Level" text={gameState.level.toString()} />
-          <Detail.Metadata.Label title="Rows" text={gameState.rowsCleared.toString()} />
-          <Detail.Metadata.Label title="Combo" text={gameState.comboCount.toString()} />
-          <Detail.Metadata.Label title="Time" text={formatTime(gameState.activePlayTimeMs)} />
-          <Detail.Metadata.Label title="Difficulty" text={gameState.difficulty} />
-          <Detail.Metadata.Separator />
-          <Detail.Metadata.Label title="Next Piece" text={renderPiecePreview(gameState.nextPiece)} />
-          <Detail.Metadata.Label title="Held Piece" text={renderPiecePreview(gameState.heldPiece)} />
-        </Detail.Metadata>
+        !gameState.isGameOver ? (
+          <Detail.Metadata>
+            <Detail.Metadata.Label title="Score" text={gameState.score.toString()} />
+            <Detail.Metadata.Label title="Level" text={gameState.level.toString()} />
+            <Detail.Metadata.Label title="Rows" text={gameState.rowsCleared.toString()} />
+            <Detail.Metadata.Label title="Combo" text={gameState.comboCount.toString()} />
+            <Detail.Metadata.Label title="Time" text={formatTime(gameState.activePlayTimeMs)} />
+            <Detail.Metadata.Label title="Difficulty" text={gameState.difficulty} />
+            <Detail.Metadata.Separator />
+            <Detail.Metadata.Label title="Next Piece" text={renderPiecePreview(gameState.nextPiece)} />
+            <Detail.Metadata.Label title="Held Piece" text={renderPiecePreview(gameState.heldPiece)} />
+          </Detail.Metadata>
+        ) : (
+          <Detail.Metadata>
+            <Detail.Metadata.Label title="Final Score" text={gameState.score.toString()} />
+            <Detail.Metadata.Label title="Level Reached" text={gameState.level.toString()} />
+            <Detail.Metadata.Label title="Rows Cleared" text={gameState.rowsCleared.toString()} />
+            <Detail.Metadata.Label title="Best Combo" text={gameState.comboCount.toString()} />
+            <Detail.Metadata.Label title="Time Played" text={formatTime(gameState.activePlayTimeMs)} />
+          </Detail.Metadata>
+        )
       }
       actions={
         <ActionPanel>
-          <Action title="Rotate" onAction={rotate} shortcut={{ modifiers: [], key: "arrowUp" }} />
-          <Action title="Move Down" onAction={() => movePiece(0, 1)} shortcut={{ modifiers: [], key: "arrowDown" }} />
-          <Action title="Move Left" onAction={() => movePiece(-1, 0)} shortcut={{ modifiers: [], key: "arrowLeft" }} />
-          <Action title="Move Right" onAction={() => movePiece(1, 0)} shortcut={{ modifiers: [], key: "arrowRight" }} />
-          <Action title="Hard Drop" onAction={hardDrop} shortcut={{ modifiers: [], key: "space" }} />
-          <Action title="Hold Piece" onAction={hold} shortcut={{ modifiers: [], key: "c" }} />
-          <Action title="Pause/Resume" onAction={togglePause} shortcut={{ modifiers: [], key: "e" }} />
-          <Action
-            title="Back to Menu"
-            icon={Icon.ArrowLeft}
-            onAction={pop}
-            shortcut={{ modifiers: [], key: "delete" }}
-          />
+          {gameState.isGameOver ? (
+            <>
+              <Action title="Restart Game" onAction={restartGame} shortcut={{ modifiers: [], key: "space" }} />
+              <Action
+                title="Back to Menu"
+                icon={Icon.ArrowLeft}
+                onAction={pop}
+                shortcut={{ modifiers: [], key: "escape" }}
+              />
+            </>
+          ) : (
+            <>
+              <Action title="Rotate" onAction={rotate} shortcut={{ modifiers: [], key: "arrowUp" }} />
+              <Action
+                title="Move Down"
+                onAction={() => startRepeat(() => movePiece(0, 1))}
+                shortcut={{ modifiers: [], key: "arrowDown" }}
+              />
+              <Action
+                title="Move Left"
+                onAction={() => startRepeat(() => movePiece(-1, 0))}
+                shortcut={{ modifiers: [], key: "arrowLeft" }}
+              />
+              <Action
+                title="Move Right"
+                onAction={() => startRepeat(() => movePiece(1, 0))}
+                shortcut={{ modifiers: [], key: "arrowRight" }}
+              />
+              <Action title="Hard Drop" onAction={hardDrop} shortcut={{ modifiers: [], key: "space" }} />
+              <Action title="Hold Piece" onAction={hold} shortcut={{ modifiers: [], key: "c" }} />
+              <Action title="Pause/Resume" onAction={togglePause} shortcut={{ modifiers: [], key: "e" }} />
+              <Action
+                title="Back to Menu"
+                icon={Icon.ArrowLeft}
+                onAction={pop}
+                shortcut={{ modifiers: [], key: "escape" }}
+              />
+            </>
+          )}
         </ActionPanel>
       }
     />

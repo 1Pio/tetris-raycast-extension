@@ -35,7 +35,7 @@ export interface GameRunRecord {
 }
 
 export interface AchievementsState {
-  unlocked: Record<AchievementId, { unlockedAt: string }>;
+  unlocked: Partial<Record<AchievementId, { unlockedAt: string }>>;
   totalAchievements: number;
 }
 
