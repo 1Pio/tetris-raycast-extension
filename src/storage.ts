@@ -36,11 +36,11 @@ export const DEFAULT_ACHIEVEMENTS: AchievementsState = {
 export async function loadSettings(): Promise<GameSettings> {
   try {
     const stored = await LocalStorage.getItem<string>(STORAGE_KEYS.SETTINGS);
-    if (!stored) return DEFAULT_SETTINGS;
+    if (!stored) return { ...DEFAULT_SETTINGS };
     return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
   } catch (error) {
     console.error("Failed to load settings:", error);
-    return DEFAULT_SETTINGS;
+    return { ...DEFAULT_SETTINGS };
   }
 }
 
@@ -55,11 +55,11 @@ export async function saveSettings(settings: GameSettings): Promise<void> {
 export async function loadStats(): Promise<GameStats> {
   try {
     const stored = await LocalStorage.getItem<string>(STORAGE_KEYS.STATS);
-    if (!stored) return DEFAULT_STATS;
+    if (!stored) return { ...DEFAULT_STATS, bestRuns: [] };
     return { ...DEFAULT_STATS, ...JSON.parse(stored) };
   } catch (error) {
     console.error("Failed to load stats:", error);
-    return DEFAULT_STATS;
+    return { ...DEFAULT_STATS, bestRuns: [] };
   }
 }
 
@@ -109,11 +109,11 @@ export async function updateStatsWithRun(
 export async function loadAchievements(): Promise<AchievementsState> {
   try {
     const stored = await LocalStorage.getItem<string>(STORAGE_KEYS.ACHIEVEMENTS);
-    if (!stored) return DEFAULT_ACHIEVEMENTS;
+    if (!stored) return { ...DEFAULT_ACHIEVEMENTS, unlocked: {} };
     return { ...DEFAULT_ACHIEVEMENTS, ...JSON.parse(stored) };
   } catch (error) {
     console.error("Failed to load achievements:", error);
-    return DEFAULT_ACHIEVEMENTS;
+    return { ...DEFAULT_ACHIEVEMENTS, unlocked: {} };
   }
 }
 

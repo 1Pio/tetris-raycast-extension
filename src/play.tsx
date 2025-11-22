@@ -26,10 +26,29 @@ export default function Command() {
   const [isLoading, setIsLoading] = useState(true);
   const [settings, setSettings] = useState<GameSettings | null>(null);
   const gameEndedRef = useRef(false);
+  const gameStateRef = useRef<GameState | null>(null);
+  const pbBaselineRef = useRef({ bestScore: 0, bestLevel: 0, mostRowsCleared: 0, bestCombo: 0 });
+  const achievementsRef = useRef<Awaited<ReturnType<typeof loadAchievements>> | null>(null);
+  const unlockedAchievementIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     async function initGame() {
-      const loadedSettings = await loadSettings();
+      const [loadedSettings, loadedStats, loadedAchievements] = await Promise.all([
+        loadSettings(),
+        loadStats(),
+        loadAchievements(),
+      ]);
+
+      pbBaselineRef.current = {
+        bestScore: loadedStats.bestScore,
+        bestLevel: loadedStats.bestLevel,
+        mostRowsCleared: loadedStats.mostRowsCleared,
+        bestCombo: loadedStats.bestCombo,
+      };
+
+      achievementsRef.current = loadedAchievements;
+      unlockedAchievementIdsRef.current = new Set(Object.keys(loadedAchievements.unlocked));
+
       setSettings(loadedSettings);
       const initialState = createInitialGameState(
         loadedSettings.difficulty,
@@ -42,14 +61,87 @@ export default function Command() {
     initGame();
   }, []);
 
+  const checkLivePB = useCallback(async (state: GameState) => {
+    const pbMessages: string[] = [];
+
+    if (state.score > pbBaselineRef.current.bestScore) {
+      pbMessages.push("Score");
+      pbBaselineRef.current.bestScore = state.score;
+    }
+    if (state.level > pbBaselineRef.current.bestLevel) {
+      pbMessages.push("Level");
+      pbBaselineRef.current.bestLevel = state.level;
+    }
+    if (state.rowsCleared > pbBaselineRef.current.mostRowsCleared) {
+      pbMessages.push("Rows Cleared");
+      pbBaselineRef.current.mostRowsCleared = state.rowsCleared;
+    }
+    if (state.comboCount > pbBaselineRef.current.bestCombo) {
+      pbMessages.push("Combo");
+      pbBaselineRef.current.bestCombo = state.comboCount;
+    }
+
+    if (pbMessages.length > 0) {
+      await showToast({
+        style: Toast.Style.Success,
+        title: `New ${pbMessages.join(", ")} PB!`,
+        message:
+          pbMessages.length === 1
+            ? `${pbMessages[0]}: ${
+                pbMessages[0] === "Score"
+                  ? state.score.toLocaleString()
+                  : pbMessages[0] === "Level"
+                    ? state.level
+                    : pbMessages[0] === "Rows Cleared"
+                      ? state.rowsCleared
+                      : `${state.comboCount}x`
+              }`
+            : "",
+      });
+    }
+  }, []);
+
+  const checkLiveAchievements = useCallback(async (state: GameState) => {
+    if (!achievementsRef.current) return;
+
+    const runData: GameRunData = {
+      score: state.score,
+      level: state.level,
+      rowsCleared: state.rowsCleared,
+      difficulty: state.difficulty,
+      comboCount: state.comboCount,
+      tetrisCount: state.tetrisCount,
+    };
+
+    const newAchievements = checkAchievements(runData, achievementsRef.current);
+    const truelyNew = newAchievements.filter((id) => !unlockedAchievementIdsRef.current.has(id));
+
+    if (truelyNew.length > 0) {
+      await unlockAchievements(truelyNew);
+      truelyNew.forEach((id) => {
+        unlockedAchievementIdsRef.current.add(id);
+        if (achievementsRef.current) {
+          achievementsRef.current.unlocked[id] = { unlockedAt: new Date().toISOString() };
+        }
+      });
+
+      const achievementNames = truelyNew.map((id) => id.replace(/_/g, " ")).join(", ");
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Achievement Unlocked!",
+        message: achievementNames,
+      });
+    }
+  }, []);
+
   const finalizeGame = useCallback(async (state: GameState) => {
     if (gameEndedRef.current) return;
     gameEndedRef.current = true;
 
+    const previousStats = await loadStats();
+
     const playTime = state.activePlayTimeMs;
     await updateStatsWithRun(state.score, state.level, state.rowsCleared, playTime, state.difficulty, state.comboCount);
-
-    const [previousStats, currentAchievements] = await Promise.all([loadStats(), loadAchievements()]);
 
     const pbMessages: string[] = [];
     if (state.score > previousStats.bestScore) pbMessages.push("Score");
@@ -64,35 +156,19 @@ export default function Command() {
         message: pbMessages.join(", "),
       });
     }
-
-    const runData: GameRunData = {
-      score: state.score,
-      level: state.level,
-      rowsCleared: state.rowsCleared,
-      difficulty: state.difficulty,
-      comboCount: state.comboCount,
-      tetrisCount: state.tetrisCount,
-    };
-
-    const newAchievements = checkAchievements(runData, currentAchievements);
-    if (newAchievements.length > 0) {
-      await unlockAchievements(newAchievements);
-      const achievementNames = newAchievements.map((id) => id.replace(/_/g, " ")).join(", ");
-      await showToast({
-        style: Toast.Style.Success,
-        title: "Achievement Unlocked!",
-        message: achievementNames,
-      });
-    }
   }, []);
 
   useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
+  useEffect(() => {
     return () => {
-      if (gameState && !gameState.isGameOver) {
-        finalizeGame(gameState);
+      if (gameStateRef.current && !gameStateRef.current.isGameOver && !gameEndedRef.current) {
+        finalizeGame(gameStateRef.current);
       }
     };
-  }, [gameState, finalizeGame]);
+  }, [finalizeGame]);
 
   useEffect(() => {
     if (gameState?.lastLineClearName) {
@@ -163,15 +239,7 @@ export default function Command() {
       const newNextPiece = getRandomTetromino(prevState.colorPalette);
 
       if (!isValidPosition(nextPiece, clearedBoard)) {
-        finalizeGame({
-          ...prevState,
-          board: clearedBoard,
-          currentPiece: null,
-          isGameOver: true,
-          activePlayTimeMs: newActiveTime,
-        });
-
-        return {
+        const finalState = {
           ...prevState,
           board: clearedBoard,
           currentPiece: null,
@@ -180,12 +248,16 @@ export default function Command() {
           level: newLevel,
           rowsCleared: newRowsCleared,
           comboCount: newCombo,
+          tetrisCount: newTetrisCount,
           activePlayTimeMs: newActiveTime,
           lastTickTime: now,
         };
+
+        finalizeGame(finalState);
+        return finalState;
       }
 
-      return {
+      const newState = {
         ...prevState,
         board: clearedBoard,
         currentPiece: nextPiece,
@@ -200,8 +272,15 @@ export default function Command() {
         lastTickTime: now,
         lastLineClearName: lineClearName,
       };
+
+      if (linesCleared > 0) {
+        checkLivePB(newState);
+        checkLiveAchievements(newState);
+      }
+
+      return newState;
     });
-  }, [finalizeGame]);
+  }, [finalizeGame, checkLivePB, checkLiveAchievements]);
 
   const movePiece = useCallback((dx: number, dy: number) => {
     setGameState((prevState) => {
@@ -272,14 +351,7 @@ export default function Command() {
       const newNextPiece = getRandomTetromino(prevState.colorPalette);
 
       if (!isValidPosition(nextPiece, clearedBoard)) {
-        finalizeGame({
-          ...prevState,
-          board: clearedBoard,
-          currentPiece: null,
-          isGameOver: true,
-        });
-
-        return {
+        const finalState = {
           ...prevState,
           board: clearedBoard,
           currentPiece: null,
@@ -288,10 +360,14 @@ export default function Command() {
           level: newLevel,
           rowsCleared: newRowsCleared,
           comboCount: newCombo,
+          tetrisCount: newTetrisCount,
         };
+
+        finalizeGame(finalState);
+        return finalState;
       }
 
-      return {
+      const newState = {
         ...prevState,
         board: clearedBoard,
         currentPiece: nextPiece,
@@ -304,8 +380,15 @@ export default function Command() {
         tetrisCount: newTetrisCount,
         lastLineClearName: lineClearName,
       };
+
+      checkLivePB(newState);
+      if (linesCleared > 0) {
+        checkLiveAchievements(newState);
+      }
+
+      return newState;
     });
-  }, [finalizeGame]);
+  }, [finalizeGame, checkLivePB, checkLiveAchievements]);
 
   const hold = useCallback(() => {
     setGameState((prevState) => {
@@ -427,7 +510,10 @@ export default function Command() {
           <Detail.Metadata.Separator />
           <Detail.Metadata.Label title="Time" text={formatTime(gameState.activePlayTimeMs)} />
           <Detail.Metadata.TagList title="Difficulty">
-            <Detail.Metadata.TagList.Item text={gameState.difficulty.charAt(0).toUpperCase() + gameState.difficulty.slice(1)} color={"#eed535"} />
+            <Detail.Metadata.TagList.Item
+              text={gameState.difficulty.charAt(0).toUpperCase() + gameState.difficulty.slice(1)}
+              color={"#eed535"}
+            />
           </Detail.Metadata.TagList>
           <Detail.Metadata.Label
             title="Difficulty"

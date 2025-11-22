@@ -12,12 +12,12 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
   {
     id: "block_placer",
     name: "Block Placer",
-    description: "Reach Level 10",
+    description: "Reach Level 5",
   },
   {
     id: "block_master",
     name: "Block Master",
-    description: "Reach Level 25",
+    description: "Reach Level 15",
   },
   {
     id: "almost_impossible",
@@ -27,7 +27,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
   {
     id: "board_master",
     name: "Board Master",
-    description: "Clear four rows at once (Tetris) at least twice in one game",
+    description: "Achieve a 'Tetris' at least twice in one game",
   },
   {
     id: "secret",
@@ -49,11 +49,11 @@ export interface GameRunData {
 export function checkAchievements(runData: GameRunData, achievements: AchievementsState): AchievementId[] {
   const newUnlocks: AchievementId[] = [];
 
-  if (!achievements.unlocked["block_placer"] && runData.level >= 10) {
+  if (!achievements.unlocked["block_placer"] && runData.level >= 5) {
     newUnlocks.push("block_placer");
   }
 
-  if (!achievements.unlocked["block_master"] && runData.level >= 25) {
+  if (!achievements.unlocked["block_master"] && runData.level >= 15) {
     newUnlocks.push("block_master");
   }
 
@@ -65,7 +65,7 @@ export function checkAchievements(runData: GameRunData, achievements: Achievemen
     newUnlocks.push("board_master");
   }
 
-  if (!achievements.unlocked["secret"] && runData.comboCount >= 10) {
+  if (!achievements.unlocked["secret"] && runData.comboCount >= 5) {
     newUnlocks.push("secret");
   }
 
