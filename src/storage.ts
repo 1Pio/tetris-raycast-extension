@@ -71,6 +71,14 @@ export async function saveStats(stats: GameStats): Promise<void> {
   }
 }
 
+export async function updateBestCombo(newCombo: number): Promise<void> {
+  const stats = await loadStats();
+  if (newCombo > stats.bestCombo) {
+    stats.bestCombo = newCombo;
+    await saveStats(stats);
+  }
+}
+
 export async function updateStatsWithRun(
   score: number,
   level: number,

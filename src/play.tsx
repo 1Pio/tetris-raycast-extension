@@ -17,7 +17,7 @@ import {
   getRandomTetromino,
   getLineClearName,
 } from "./game-engine";
-import { loadSettings, updateStatsWithRun, loadStats, loadAchievements } from "./storage";
+import { loadSettings, updateStatsWithRun, loadStats, loadAchievements, updateBestCombo } from "./storage";
 import { checkAchievements, unlockAchievements, GameRunData } from "./achievements";
 
 export default function Command() {
@@ -28,6 +28,7 @@ export default function Command() {
   const gameEndedRef = useRef(false);
   const gameStateRef = useRef<GameState | null>(null);
   const pbBaselineRef = useRef({ bestScore: 0, bestLevel: 0, mostRowsCleared: 0, bestCombo: 0 });
+  const pbToastShownRef = useRef({ score: false, level: false, rows: false });
   const achievementsRef = useRef<Awaited<ReturnType<typeof loadAchievements>> | null>(null);
   const unlockedAchievementIdsRef = useRef<Set<string>>(new Set());
 
@@ -62,41 +63,45 @@ export default function Command() {
   }, []);
 
   const checkLivePB = useCallback(async (state: GameState) => {
-    const pbMessages: string[] = [];
-
-    if (state.score > pbBaselineRef.current.bestScore) {
-      pbMessages.push("Score");
+    if (state.score > pbBaselineRef.current.bestScore && !pbToastShownRef.current.score) {
+      pbToastShownRef.current.score = true;
       pbBaselineRef.current.bestScore = state.score;
-    }
-    if (state.level > pbBaselineRef.current.bestLevel) {
-      pbMessages.push("Level");
-      pbBaselineRef.current.bestLevel = state.level;
-    }
-    if (state.rowsCleared > pbBaselineRef.current.mostRowsCleared) {
-      pbMessages.push("Rows Cleared");
-      pbBaselineRef.current.mostRowsCleared = state.rowsCleared;
-    }
-    if (state.comboCount > pbBaselineRef.current.bestCombo) {
-      pbMessages.push("Combo");
-      pbBaselineRef.current.bestCombo = state.comboCount;
-    }
-
-    if (pbMessages.length > 0) {
       await showToast({
         style: Toast.Style.Success,
-        title: `New ${pbMessages.join(", ")} PB!`,
-        message:
-          pbMessages.length === 1
-            ? `${pbMessages[0]}: ${
-                pbMessages[0] === "Score"
-                  ? state.score.toLocaleString()
-                  : pbMessages[0] === "Level"
-                    ? state.level
-                    : pbMessages[0] === "Rows Cleared"
-                      ? state.rowsCleared
-                      : `${state.comboCount}x`
-              }`
-            : "",
+        title: "New Score PB!",
+        message: state.score.toLocaleString(),
+      });
+    }
+
+    if (state.level > pbBaselineRef.current.bestLevel && !pbToastShownRef.current.level) {
+      pbToastShownRef.current.level = true;
+      pbBaselineRef.current.bestLevel = state.level;
+      await showToast({
+        style: Toast.Style.Success,
+        title: "New Level PB!",
+        message: `Level ${state.level}`,
+      });
+    }
+
+    if (state.rowsCleared > pbBaselineRef.current.mostRowsCleared && !pbToastShownRef.current.rows) {
+      pbToastShownRef.current.rows = true;
+      pbBaselineRef.current.mostRowsCleared = state.rowsCleared;
+      await showToast({
+        style: Toast.Style.Success,
+        title: "New Rows PB!",
+        message: `${state.rowsCleared} rows cleared`,
+      });
+    }
+  }, []);
+
+  const checkComboPB = useCallback(async (newCombo: number) => {
+    if (newCombo > pbBaselineRef.current.bestCombo) {
+      pbBaselineRef.current.bestCombo = newCombo;
+      await updateBestCombo(newCombo);
+      await showToast({
+        style: Toast.Style.Success,
+        title: "New Combo PB!",
+        message: `${newCombo}x combo`,
       });
     }
   }, []);
@@ -134,28 +139,18 @@ export default function Command() {
     }
   }, []);
 
-  const finalizeGame = useCallback(async (state: GameState) => {
+  const finalizeGame = useCallback(async (finalState: GameState) => {
     if (gameEndedRef.current) return;
     gameEndedRef.current = true;
 
-    const previousStats = await loadStats();
-
-    const playTime = state.activePlayTimeMs;
-    await updateStatsWithRun(state.score, state.level, state.rowsCleared, playTime, state.difficulty, state.comboCount);
-
-    const pbMessages: string[] = [];
-    if (state.score > previousStats.bestScore) pbMessages.push("Score");
-    if (state.level > previousStats.bestLevel) pbMessages.push("Level");
-    if (state.rowsCleared > previousStats.mostRowsCleared) pbMessages.push("Rows Cleared");
-    if (state.comboCount > previousStats.bestCombo) pbMessages.push("Combo");
-
-    if (pbMessages.length > 0) {
-      await showToast({
-        style: Toast.Style.Success,
-        title: "New Personal Best!",
-        message: pbMessages.join(", "),
-      });
-    }
+    await updateStatsWithRun(
+      finalState.score,
+      finalState.level,
+      finalState.rowsCleared,
+      finalState.activePlayTimeMs,
+      finalState.difficulty,
+      finalState.comboCount,
+    );
   }, []);
 
   useEffect(() => {
@@ -164,8 +159,16 @@ export default function Command() {
 
   useEffect(() => {
     return () => {
-      if (gameStateRef.current && !gameStateRef.current.isGameOver && !gameEndedRef.current) {
-        finalizeGame(gameStateRef.current);
+      const currentState = gameStateRef.current;
+      if (currentState && !currentState.isGameOver && !gameEndedRef.current) {
+        const now = Date.now();
+        const timeDelta = now - currentState.lastTickTime;
+        const finalState: GameState = {
+          ...currentState,
+          activePlayTimeMs: currentState.activePlayTimeMs + timeDelta,
+          lastTickTime: now,
+        };
+        finalizeGame(finalState);
       }
     };
   }, [finalizeGame]);
@@ -230,6 +233,8 @@ export default function Command() {
         if (linesCleared === 4) {
           newTetrisCount += 1;
         }
+
+        checkComboPB(newCombo);
       } else {
         newCombo = 0;
       }
@@ -280,7 +285,7 @@ export default function Command() {
 
       return newState;
     });
-  }, [finalizeGame, checkLivePB, checkLiveAchievements]);
+  }, [finalizeGame, checkLivePB, checkLiveAchievements, checkComboPB]);
 
   const movePiece = useCallback((dx: number, dy: number) => {
     setGameState((prevState) => {
@@ -342,6 +347,8 @@ export default function Command() {
         if (linesCleared === 4) {
           newTetrisCount += 1;
         }
+
+        checkComboPB(newCombo);
       } else {
         newCombo = 0;
       }
@@ -351,6 +358,8 @@ export default function Command() {
       const newNextPiece = getRandomTetromino(prevState.colorPalette);
 
       if (!isValidPosition(nextPiece, clearedBoard)) {
+        const now = Date.now();
+        const timeDelta = now - prevState.lastTickTime;
         const finalState = {
           ...prevState,
           board: clearedBoard,
@@ -361,6 +370,8 @@ export default function Command() {
           rowsCleared: newRowsCleared,
           comboCount: newCombo,
           tetrisCount: newTetrisCount,
+          activePlayTimeMs: prevState.activePlayTimeMs + timeDelta,
+          lastTickTime: now,
         };
 
         finalizeGame(finalState);
@@ -388,7 +399,7 @@ export default function Command() {
 
       return newState;
     });
-  }, [finalizeGame, checkLivePB, checkLiveAchievements]);
+  }, [finalizeGame, checkLivePB, checkLiveAchievements, checkComboPB]);
 
   const hold = useCallback(() => {
     setGameState((prevState) => {
@@ -537,7 +548,6 @@ export default function Command() {
             title="Back to Menu"
             icon={Icon.ArrowLeft}
             onAction={pop}
-            shortcut={{ modifiers: [], key: "delete" }}
           />
         </ActionPanel>
       }
