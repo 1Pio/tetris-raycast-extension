@@ -1,7 +1,7 @@
 import { List } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { GameStats, AchievementsState } from "./types";
-import { loadStats, loadAchievements } from "./storage";
+import { loadStats, loadAchievements, commitCurrentRunIfExists } from "./storage";
 import { formatTime } from "./game-engine";
 import { ACHIEVEMENT_DEFINITIONS, isAchievementUnlocked } from "./achievements";
 
@@ -13,6 +13,7 @@ export default function Command() {
 
   useEffect(() => {
     async function load() {
+      await commitCurrentRunIfExists();
       const [loadedStats, loadedAchievements] = await Promise.all([loadStats(), loadAchievements()]);
       setStats(loadedStats);
       setAchievements(loadedAchievements);
