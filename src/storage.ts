@@ -1,10 +1,22 @@
 import { LocalStorage } from "@raycast/api";
-import { GameSettings, GameStats, AchievementsState, GameRunRecord } from "./types";
+import { GameSettings, GameStats, AchievementsState, GameRunRecord, Difficulty } from "./types";
+
+export interface CurrentRunSnapshot {
+  score: number;
+  level: number;
+  rowsCleared: number;
+  playTimeMs: number;
+  difficulty: Difficulty;
+  comboCount: number;
+  tetrisCount: number;
+  timestamp: string;
+}
 
 const STORAGE_KEYS = {
   SETTINGS: "tetris:settings:v1",
   STATS: "tetris:stats:v1",
   ACHIEVEMENTS: "tetris:achievements:v1",
+  CURRENT_RUN: "tetris:current-run:v1",
 };
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -144,4 +156,42 @@ export async function resetAchievements(): Promise<void> {
 export async function resetAll(): Promise<void> {
   await resetStats();
   await resetAchievements();
+}
+
+export async function loadCurrentRun(): Promise<CurrentRunSnapshot | null> {
+  try {
+    const stored = await LocalStorage.getItem<string>(STORAGE_KEYS.CURRENT_RUN);
+    if (!stored) return null;
+    return JSON.parse(stored) as CurrentRunSnapshot;
+  } catch (error) {
+    console.error("Failed to load current run snapshot:", error);
+    return null;
+  }
+}
+
+export async function saveCurrentRun(run: CurrentRunSnapshot | null): Promise<void> {
+  try {
+    if (run === null) {
+      await LocalStorage.removeItem(STORAGE_KEYS.CURRENT_RUN);
+    } else {
+      await LocalStorage.setItem(STORAGE_KEYS.CURRENT_RUN, JSON.stringify(run));
+    }
+  } catch (error) {
+    console.error("Failed to save current run snapshot:", error);
+  }
+}
+
+export async function commitCurrentRunIfExists(): Promise<void> {
+  const snapshot = await loadCurrentRun();
+  if (snapshot) {
+    await updateStatsWithRun(
+      snapshot.score,
+      snapshot.level,
+      snapshot.rowsCleared,
+      snapshot.playTimeMs,
+      snapshot.difficulty,
+      snapshot.comboCount,
+    );
+    await saveCurrentRun(null);
+  }
 }

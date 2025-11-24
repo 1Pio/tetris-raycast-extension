@@ -284,7 +284,7 @@ export function renderBoardAsMarkdown(state: GameState): string {
     state.currentPiece && state.visualEffectsEnabled ? getGhostPiece(state.currentPiece, state.board) : null;
 
   for (let y = 0; y < BOARD_HEIGHT; y++) {
-    let border = "│"
+    const border = "│";
     let row = border;
     for (let x = 0; x < BOARD_WIDTH; x++) {
       const cell = state.board[y * BOARD_WIDTH + x];

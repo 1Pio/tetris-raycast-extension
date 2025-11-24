@@ -17,7 +17,15 @@ import {
   getRandomTetromino,
   getLineClearName,
 } from "./game-engine";
-import { loadSettings, updateStatsWithRun, loadStats, loadAchievements, updateBestCombo } from "./storage";
+import {
+  loadSettings,
+  updateStatsWithRun,
+  loadStats,
+  loadAchievements,
+  updateBestCombo,
+  commitCurrentRunIfExists,
+  saveCurrentRun,
+} from "./storage";
 import { checkAchievements, unlockAchievements, GameRunData } from "./achievements";
 
 export default function Command() {
@@ -34,6 +42,8 @@ export default function Command() {
 
   useEffect(() => {
     async function initGame() {
+      await commitCurrentRunIfExists();
+
       const [loadedSettings, loadedStats, loadedAchievements] = await Promise.all([
         loadSettings(),
         loadStats(),
@@ -56,6 +66,18 @@ export default function Command() {
         loadedSettings.colorPalette,
         loadedSettings.visualEffectsEnabled,
       );
+
+      await saveCurrentRun({
+        score: 0,
+        level: 1,
+        rowsCleared: 0,
+        playTimeMs: 0,
+        difficulty: loadedSettings.difficulty,
+        comboCount: 0,
+        tetrisCount: 0,
+        timestamp: new Date().toISOString(),
+      });
+
       setGameState(initialState);
       setIsLoading(false);
     }
@@ -151,6 +173,8 @@ export default function Command() {
       finalState.difficulty,
       finalState.comboCount,
     );
+
+    await saveCurrentRun(null);
   }, []);
 
   useEffect(() => {
@@ -158,20 +182,55 @@ export default function Command() {
   }, [gameState]);
 
   useEffect(() => {
+    if (!gameState || gameEndedRef.current) return;
+
+    if (gameState.score === 0 && gameState.rowsCleared === 0 && !gameState.isGameOver) return;
+
+    const now = Date.now();
+    const timeDelta = gameState.isPaused || gameState.isGameOver ? 0 : now - gameState.lastTickTime;
+    const effectivePlayTimeMs = gameState.activePlayTimeMs + timeDelta;
+
+    saveCurrentRun({
+      score: gameState.score,
+      level: gameState.level,
+      rowsCleared: gameState.rowsCleared,
+      playTimeMs: effectivePlayTimeMs,
+      difficulty: gameState.difficulty,
+      comboCount: gameState.comboCount,
+      tetrisCount: gameState.tetrisCount,
+      timestamp: new Date().toISOString(),
+    });
+  }, [
+    gameState?.score,
+    gameState?.level,
+    gameState?.rowsCleared,
+    gameState?.comboCount,
+    gameState?.tetrisCount,
+    gameState?.isPaused,
+    gameState?.isGameOver,
+  ]);
+
+  useEffect(() => {
     return () => {
       const currentState = gameStateRef.current;
-      if (currentState && !currentState.isGameOver && !gameEndedRef.current) {
+      if (currentState && !gameEndedRef.current) {
         const now = Date.now();
-        const timeDelta = now - currentState.lastTickTime;
-        const finalState: GameState = {
-          ...currentState,
-          activePlayTimeMs: currentState.activePlayTimeMs + timeDelta,
-          lastTickTime: now,
-        };
-        finalizeGame(finalState);
+        const timeDelta = currentState.isPaused || currentState.isGameOver ? 0 : now - currentState.lastTickTime;
+        const effectivePlayTimeMs = currentState.activePlayTimeMs + timeDelta;
+
+        saveCurrentRun({
+          score: currentState.score,
+          level: currentState.level,
+          rowsCleared: currentState.rowsCleared,
+          playTimeMs: effectivePlayTimeMs,
+          difficulty: currentState.difficulty,
+          comboCount: currentState.comboCount,
+          tetrisCount: currentState.tetrisCount,
+          timestamp: new Date().toISOString(),
+        });
       }
     };
-  }, [finalizeGame]);
+  }, []);
 
   useEffect(() => {
     if (gameState?.lastLineClearName) {
@@ -455,6 +514,26 @@ export default function Command() {
     });
   }, []);
 
+  const exitToMenuAndSave = useCallback(async () => {
+    const currentState = gameStateRef.current;
+    if (!currentState || gameEndedRef.current) {
+      pop();
+      return;
+    }
+
+    const now = Date.now();
+    const timeDelta = currentState.isPaused ? 0 : now - currentState.lastTickTime;
+    const finalState: GameState = {
+      ...currentState,
+      isGameOver: true,
+      activePlayTimeMs: currentState.activePlayTimeMs + timeDelta,
+      lastTickTime: now,
+    };
+
+    await finalizeGame(finalState);
+    pop();
+  }, [pop, finalizeGame]);
+
   if (isLoading || !gameState || !settings) {
     return <Detail isLoading={true} markdown="Loading game..." />;
   }
@@ -544,11 +623,7 @@ export default function Command() {
           <Action title="Hard Drop" onAction={hardDrop} shortcut={primaryKeyShortcut} />
           <Action title="Hold Piece" onAction={hold} shortcut={secondaryKeyShortcut} />
           <Action title="Pause/Resume" onAction={togglePause} shortcut={pauseKeyShortcut} />
-          <Action
-            title="Back to Menu"
-            icon={Icon.ArrowLeft}
-            onAction={pop}
-          />
+          <Action title="Back to Menu" icon={Icon.ArrowLeft} onAction={exitToMenuAndSave} />
         </ActionPanel>
       }
     />
